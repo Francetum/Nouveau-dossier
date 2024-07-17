@@ -1,0 +1,40 @@
+---
+  - hosts:
+    - server
+    tasks:
+      - name: Upgrade a server and register stdout
+        ansible.builtin.apt:
+          update_cache: true
+          upgrade: dist
+        register: upgradeable
+
+      - name: Register uptime hint.
+        ansible.builtin.shell: uptime -s
+        register: uptime
+        check_mode: true
+        changed_when: uptime.rc != 0 # <- Uses the return code to define when the task has changed.
+
+      - name: Check for reboot hint.
+        ansible.builtin.shell: last=$(date -r $(ls /boot/initrd* | tail -1) +"%Y%m%d%H%M%S"); uptime=$(date -d"$(uptime -s)" +%Y%m%d%H%M%S); if [ "$last" -gt "$uptime" ]; then echo "reboot"; else echo "last kernel"; fi
+        ignore_errors: true
+        register: reboot_hint
+        check_mode: false
+        changed_when: reboot_hint.rc != 0 # <- Uses the return code to define when the task has changed.
+
+      - name: Show me apt stdout
+        ansible.builtin.debug:
+          msg: "{{ upgradeable.stdout_lines }}"
+
+      - name: Show me uptime
+        ansible.builtin.debug:
+          msg: "{{ uptime.stdout_lines }}"
+
+      - name: Show me kernel status
+        ansible.builtin.debug:
+          msg: "{{ reboot_hint.stdout_lines }}"
+
+
+      # Uncomment this if you want to automatically reboot if kernel have been updated 
+      # - name: Reboot the server
+      #   reboot:
+      #   when: reboot_hint.stdout.find("reboot") != -1
